@@ -1,7 +1,8 @@
 // 
 // tsh - A tiny shell program with job control
 // 
-// <Put your name and login ID here>
+// Jack Beeken
+// beekenj
 //
 
 using namespace std;
