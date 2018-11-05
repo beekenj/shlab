@@ -1,0 +1,4 @@
+1. Added built in command "quit"
+2. Added execve routine for running commands
+3. Wait for the child to terminate
+4. Implement sigint_handler
