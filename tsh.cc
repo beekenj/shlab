@@ -189,6 +189,9 @@ void eval(char *cmdline)
         unix_error("");
       }
     }
+    else {
+      printf("bg job\n");
+    }
   }
 
   return;
