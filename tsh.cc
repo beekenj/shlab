@@ -29,7 +29,7 @@ using namespace std;
 static char prompt[] = "tshell> ";
 int verbose = 0;
 
-volatile pid_t pid;
+// volatile pid_t pid;
 
 //
 // You need to implement the functions eval, builtin_cmd, do_bgfg,
@@ -169,28 +169,43 @@ void eval(char *cmdline)
   // in background mode or FALSE if it should run in FG
   //
   int bg = parseline(cmdline, argv);
+  // Initialize job
+  struct job_t *job;
+  //
+  pid_t pid;
+  //
+  sigset_t mask;
   if (argv[0] == NULL)
     return;   /* ignore empty lines */
 
   if (!builtin_cmd(argv)) {
+    // Masking
+    sigemptyset(&mask); // Why address of mask?
+    sigaddset(&mask, SIGCHLD);
+    sigprocmask(SIG_BLOCK, &mask, NULL);
     // Need wrapper function for fork?
     if ((pid = fork()) == 0) {
       // 2. Added execve routine for running commands
+      // in child
+      setpgid(0, 0);  //
+      sigprocmask(SIG_UNBLOCK, &mask, NULL);
       if (execve(argv[0], argv, environ) < 0) {
         printf("%s: Command not found.\n", argv[0]);
         exit(0);
       }
     }
-    // 3. Wait for the child to terminate
-    // ? Runs without the wait, but w/o prompt... why? Reap zombie?
+    // 4. Wait for the child to terminate
+    // waitfg ...
+    // 3. Add jobs
+    addjob(jobs, pid, bg ? BG : FG, cmdline);
     if (!bg) {
-      int status;
-      if (waitpid(pid, &status, 0) < 0) {
-        unix_error("");
-      }
+      sigprocmask(SIG_UNBLOCK, &mask, NULL);
+      waitfg(pid);
     }
     else {
-      printf("bg job\n");
+      sigprocmask(SIG_UNBLOCK, &mask, NULL);
+      job = getjobpid(jobs, pid);
+      printf("[%d] (%d) %s", job->jid, pid, cmdline);
     }
   }
 
@@ -210,8 +225,15 @@ int builtin_cmd(char **argv)
 {
   string cmd(argv[0]);
   // 1. Quit the shell
-  if (cmd == "quit")
+  if (cmd == "quit") {
     exit(0);
+    return 1;  //control never reaches here
+  }
+  // 5. Jobs command
+  if (cmd == "jobs") {
+    listjobs(jobs);
+    return 1;
+  }
   return 0;     /* not a builtin command */
 }
 
@@ -269,6 +291,10 @@ void do_bgfg(char **argv)
 //
 void waitfg(pid_t pid)
 {
+  struct job_t *job = getjobpid(jobs, pid);
+  while (job->state == FG) {
+    sleep(1);
+  }
   return;
 }
 
@@ -288,6 +314,11 @@ void waitfg(pid_t pid)
 //
 void sigchld_handler(int sig)
 {
+  int status;
+  pid_t pid;
+  while ((pid = waitpid(-1, &status, WNOHANG)) > 0) {
+    deletejob(jobs, pid);
+  }
   return;
 }
 
@@ -299,16 +330,13 @@ void sigchld_handler(int sig)
 //
 void sigint_handler(int sig)
 {
-
-  // sio_puts("ctrl-c\n");
-  printf("ctrl-c\n");
-  kill(-pid, SIGKILL);
-  // int status;
-  // if (waitpid(pid, &status, 0) < 0) {
-  //       unix_error("");
-  // }
-  // _exit(0);
-  // return;
+  pid_t pid = fgpid(jobs);
+  int jid = pid2jid(pid);
+  if (pid != 0){
+    kill(-pid, sig);
+    printf("Job [%d] (%d) terminated by signal %d\n", jid, pid, sig);
+  }
+  return;
 }
 
 /////////////////////////////////////////////////////////////////////////////
@@ -319,6 +347,12 @@ void sigint_handler(int sig)
 //
 void sigtstp_handler(int sig)
 {
+  pid_t pid = fgpid(jobs);
+  int jid = pid2jid(pid);
+  if (pid != 0){
+    kill(-pid, sig);
+    printf("Job [%d] (%d) stopped by signal %d\n", jid, pid, sig);
+  }
   return;
 }
 

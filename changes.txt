@@ -1,4 +1,5 @@
 1. Added built in command "quit"
 2. Added execve routine for running commands
-3. Wait for the child to terminate
-4. Implement sigint_handler
+3. Add jobs
+4. Implement sigchild handler
+5. Added built in command "jobs"
