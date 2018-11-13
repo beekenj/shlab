@@ -316,8 +316,10 @@ void sigchld_handler(int sig)
 {
   int status;
   pid_t pid;
-  while ((pid = waitpid(-1, &status, WNOHANG)) > 0) {
-    deletejob(jobs, pid);
+  while ((pid = waitpid(-1, &status, WNOHANG|WUNTRACED)) > 0) {
+    if (WIFEXITED(status)) {
+      deletejob(jobs, pid);      
+    }
   }
   return;
 }
