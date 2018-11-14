@@ -3,3 +3,9 @@
 3. Add jobs
 4. Implement sigchild handler
 5. Added built in command "jobs"
+6. Expanded sigchld_handler for sigint and sigstop cases
+7. Added built in commands "bg" and "fg"
+8. Implement bg command
+9. Implement fg command
+10. Moved printf statements from sigint and sigstop handlers to sigchld handler
+    and added status checks for reaped child (necessary to display signal numbers on termination or stop)

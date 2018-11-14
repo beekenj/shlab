@@ -26,7 +26,7 @@ using namespace std;
 // Needed global variable definitions
 //
 
-static char prompt[] = "tshell> ";
+static char prompt[] = "tsh> ";
 int verbose = 0;
 
 // volatile pid_t pid;
@@ -159,10 +159,6 @@ void eval(char *cmdline)
   // use below to launch a process.
   //
   char *argv[MAXARGS];  // Argument list for execve()
-  // char buf[MAXLINE];
-  // pid_t pid;
-
-  // char path[] = '/bin/';
 
   //
   // The 'bg' variable is TRUE if the job should run
@@ -180,8 +176,10 @@ void eval(char *cmdline)
 
   if (!builtin_cmd(argv)) {
     // Masking
-    sigemptyset(&mask); // Why address of mask?
+    sigemptyset(&mask);
     sigaddset(&mask, SIGCHLD);
+    // sigaddset(&mask, SIGINT);
+    // sigaddset(&mask, SIGTSTP);
     sigprocmask(SIG_BLOCK, &mask, NULL);
     // Need wrapper function for fork?
     if ((pid = fork()) == 0) {
@@ -234,6 +232,13 @@ int builtin_cmd(char **argv)
     listjobs(jobs);
     return 1;
   }
+
+  // 7. bg/fg command
+  if (cmd == "bg" || cmd == "fg") {
+    // printf("bgfg\n");
+    do_bgfg(argv);
+    return 1;
+  }
   return 0;     /* not a builtin command */
 }
 
@@ -282,6 +287,19 @@ void do_bgfg(char **argv)
   //
   string cmd(argv[0]);
 
+  // 8. bg command continues stopped process in background
+  if (cmd == "bg") {
+    kill(-jobp -> pid, SIGCONT);
+    jobp -> state = BG;
+    printf("[%d] (%d) %s", jobp->jid, jobp->pid, jobp->cmdline);
+  }
+  // 9. fg command continues stopped process in forground
+  else if (cmd == "fg") {
+    kill(-jobp -> pid, SIGCONT);
+    jobp -> state = FG;
+    waitfg(jobp->pid);
+  }
+
   return;
 }
 
@@ -317,8 +335,22 @@ void sigchld_handler(int sig)
   int status;
   pid_t pid;
   while ((pid = waitpid(-1, &status, WNOHANG|WUNTRACED)) > 0) {
+    // Child exits normally
     if (WIFEXITED(status)) {
-      deletejob(jobs, pid);      
+      deletejob(jobs, pid);
+    }
+    // Child exits from sigint
+    else if (WIFSIGNALED(status)) {
+      // Termination signals from other processes do not use signal handler in program...
+      printf("Job [%d] (%d) terminated by signal %d\n", pid2jid(pid), pid, WTERMSIG(status));
+      deletejob(jobs, pid);
+    }
+    // Child stops from sigstop
+    else if (WIFSTOPPED(status)) {
+      // Stop signals from other processes do not use signal handler in program...
+      printf("Job [%d] (%d) stopped by signal %d\n", pid2jid(pid), pid, WSTOPSIG(status));
+      job_t* job = getjobpid(jobs, pid);
+      job -> state = ST;
     }
   }
   return;
@@ -333,10 +365,10 @@ void sigchld_handler(int sig)
 void sigint_handler(int sig)
 {
   pid_t pid = fgpid(jobs);
-  int jid = pid2jid(pid);
+  // int jid = pid2jid(pid);
   if (pid != 0){
     kill(-pid, sig);
-    printf("Job [%d] (%d) terminated by signal %d\n", jid, pid, sig);
+    // printf("Job [%d] (%d) terminated by signal %d\n", jid, pid, sig);
   }
   return;
 }
@@ -350,10 +382,10 @@ void sigint_handler(int sig)
 void sigtstp_handler(int sig)
 {
   pid_t pid = fgpid(jobs);
-  int jid = pid2jid(pid);
+  // int jid = pid2jid(pid);
   if (pid != 0){
     kill(-pid, sig);
-    printf("Job [%d] (%d) stopped by signal %d\n", jid, pid, sig);
+    // printf("Job [%d] (%d) stopped by signal %d\n", jid, pid, sig);
   }
   return;
 }
